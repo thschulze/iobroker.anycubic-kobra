@@ -1,0 +1,80 @@
+{
+  "common": {
+    "name": "anycubic-kobra",
+    "version": "1.0.0",
+    "news": {
+      "1.0.0": {
+        "en": "Initial release with support for Kobra S1 and Kobra 3",
+        "de": "Erstveröffentlichung mit Unterstützung für Kobra S1 und Kobra 3"
+      }
+    },
+    "title": "Anycubic Kobra 3D Printer",
+    "titleLang": {
+      "en": "Anycubic Kobra 3D Printer",
+      "de": "Anycubic Kobra 3D-Drucker"
+    },
+    "desc": {
+      "en": "Control and monitor Anycubic Kobra 3D printers (S1, Kobra 3)",
+      "de": "Steuerung und Überwachung von Anycubic Kobra 3D-Druckern (S1, Kobra 3)"
+    },
+    "authors": ["MiniMax Agent <info@iobroker.net>"],
+    "keywords": ["3d printer", "anycubic", "kobra", "mqtt"],
+    "license": "MIT",
+    "platform": "Javascript/Node.js",
+    "main": "main.js",
+    "icon": "anycubic-kobra.png",
+    "enabled": true,
+    "extIcon": "https://raw.githubusercontent.com/iobroker-community-adapters/ioBroker.anycubic-kobra/main/admin/anycubic-kobra.png",
+    "readme": "https://github.com/iobroker-community-adapters/ioBroker.anycubic-kobra/blob/main/README.md",
+    "loglevel": "info",
+    "mode": "daemon",
+    "type": "hardware",
+    "compact": true,
+    "connectionType": "cloud",
+    "dataSource": "poll",
+    "adminUI": {
+      "config": "materialize"
+    },
+    "dependencies": [
+      {
+        "js-controller": ">=5.0.0"
+      }
+    ],
+    "globalDependencies": [
+      {
+        "admin": ">=6.0.0"
+      }
+    ]
+  },
+  "native": {
+    "connectionMode": "cloud",
+    "cloudToken": "",
+    "mqttEnabled": true,
+    "pollInterval": 30,
+    "printers": []
+  },
+  "objects": [],
+  "instanceObjects": [
+    {
+      "_id": "info",
+      "type": "channel",
+      "common": {
+        "name": "Information"
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.connection",
+      "type": "state",
+      "common": {
+        "role": "indicator.connected",
+        "name": "Cloud connection status",
+        "type": "boolean",
+        "read": true,
+        "write": false,
+        "def": false
+      },
+      "native": {}
+    }
+  ]
+}
