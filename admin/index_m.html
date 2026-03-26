@@ -1,344 +1,314 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Anycubic Kobra Adapter</title>
-<link rel="stylesheet" type="text/css" href="../../css/adapter.css"/>
-<link rel="stylesheet" type="text/css" href="../../lib/css/materialize.css">
-<script type="text/javascript" src="../../lib/js/jquery-3.2.1.min.js"></script>
-<script type="text/javascript" src="../../socket.io/socket.io.js"></script>
-<script type="text/javascript" src="../../js/translate.js"></script>
-<script type="text/javascript" src="../../lib/js/materialize.js"></script>
-<script type="text/javascript" src="../../js/adapter-settings.js"></script>
-<style>
-.m.adapter-container {
-padding: 20px;
-}
-.card-title-main {
-background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%);
-color: white;
-padding: 20px !important;
-margin: 0 !important;
-border-radius: 4px 4px 0 0;
-}
-.card-title-main i {
-font-size: 32px;
-margin-right: 15px;
-}
-.section-card {
-margin-bottom: 20px;
-}
-.section-header {
-background-color: #f5f5f5;
-padding: 15px 20px;
-border-bottom: 1px solid #e0e0e0;
-font-weight: 500;
-color: #424242;
-}
-.section-header i {
-margin-right: 10px;
-color: #1565c0;
-}
-.printer-item {
-border: 1px solid #e0e0e0;
-border-radius: 8px;
-padding: 15px;
-margin: 10px 0;
-background: #fafafa;
-}
-.help-text {
-color: #757575;
-font-size: 12px;
-margin-top: 5px;
-}
-.token-input {
-font-family: monospace;
-font-size: 12px;
-}
-.connection-mode-card {
-cursor: pointer;
-transition: all 0.3s;
-border: 2px solid transparent;
-}
-.connection-mode-card.selected {
-border-color: #1565c0;
-background-color: #e3f2fd;
-}
-.instructions-list {
-background: #fff3e0;
-border-radius: 8px;
-padding: 15px 20px;
-margin: 15px 0;
-}
-.instructions-list li {
-margin: 8px 0;
-color: #e65100;
-}
-.instructions-list code {
-background: #ffecb3;
-padding: 2px 6px;
-border-radius: 4px;
-}
-</style>
+    <meta charset="utf-8">
+    <title>Anycubic Kobra</title>
+    <link rel="stylesheet" type="text/css" href="../../css/adapter.css">
+    <link rel="stylesheet" type="text/css" href="../../lib/css/materialize.css">
+    <script type="text/javascript" src="../../lib/js/jquery-3.2.1.min.js"></script>
+    <script type="text/javascript" src="../../socket.io/socket.io.js"></script>
+    <script type="text/javascript" src="../../js/translate.js"></script>
+    <script type="text/javascript" src="../../lib/js/materialize.js"></script>
+    <script type="text/javascript" src="../../js/adapter-settings.js"></script>
+    <style>
+        .adapter-container {
+            padding: 24px;
+            max-width: 900px;
+        }
+        .adapter-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: linear-gradient(135deg, #1976D2 0%, #1565C0 100%);
+            border-radius: 8px;
+            color: #fff;
+        }
+        .adapter-header i {
+            font-size: 36px;
+            margin-right: 16px;
+        }
+        .adapter-header h5 {
+            margin: 0;
+            font-weight: 500;
+        }
+        .section-card {
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .section-header {
+            background: #37474F;
+            color: #fff;
+            padding: 14px 20px;
+            border-radius: 8px 8px 0 0;
+            font-weight: 500;
+            font-size: 15px;
+        }
+        .section-header i {
+            margin-right: 12px;
+            vertical-align: middle;
+            color: #4FC3F7;
+        }
+        .card-content {
+            padding: 20px;
+            background: #fff;
+            border-radius: 0 0 8px 8px;
+        }
+        /* Mode Cards */
+        .mode-card {
+            cursor: pointer;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            background: #fafafa;
+        }
+        .mode-card:hover {
+            border-color: #90CAF9;
+            box-shadow: 0 4px 12px rgba(25,118,210,0.2);
+        }
+        .mode-card.selected {
+            border-color: #1976D2;
+            background: #E3F2FD;
+        }
+        .mode-card .card-content {
+            background: transparent;
+            padding: 20px 10px;
+        }
+        .mode-card p {
+            margin: 8px 0 0 0;
+            color: #424242;
+            font-weight: 500;
+        }
+        /* Token Help Box */
+        .token-help {
+            background: #FFF8E1;
+            border-left: 4px solid #FFA000;
+            padding: 14px 18px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 20px;
+            color: #5D4037;
+        }
+        .token-help b {
+            color: #E65100;
+        }
+        .token-help code {
+            background: #FFE082;
+            color: #BF360C;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        /* Input Fields */
+        .input-field label {
+            color: #616161;
+        }
+        .input-field input:focus + label,
+        .input-field textarea:focus + label {
+            color: #1976D2 !important;
+        }
+        .input-field input:focus,
+        .input-field textarea:focus {
+            border-bottom: 1px solid #1976D2 !important;
+            box-shadow: 0 1px 0 0 #1976D2 !important;
+        }
+        .input-field input,
+        .input-field textarea {
+            color: #212121;
+        }
+        /* Checkbox */
+        [type="checkbox"].filled-in:checked + span:after {
+            border-color: #1976D2;
+            background-color: #1976D2;
+        }
+        [type="checkbox"] + span {
+            color: #424242;
+        }
+        /* Local Config Info */
+        .info-text {
+            background: #E8F5E9;
+            border-left: 4px solid #4CAF50;
+            padding: 12px 16px;
+            border-radius: 0 8px 8px 0;
+            color: #2E7D32;
+            margin-bottom: 16px;
+        }
+        /* Table */
+        table.table-values {
+            background: #FAFAFA;
+            border-radius: 4px;
+        }
+        table.table-values thead {
+            background: #ECEFF1;
+        }
+        table.table-values th {
+            color: #455A64;
+            font-weight: 500;
+            padding: 12px;
+        }
+        table.table-values td {
+            color: #333;
+            padding: 10px;
+        }
+        /* Buttons */
+        .btn-floating.blue {
+            background-color: #1976D2;
+        }
+        .btn-floating.blue:hover {
+            background-color: #1565C0;
+        }
+        /* Dark Mode Support */
+        @media (prefers-color-scheme: dark) {
+            .card-content { background: #263238; }
+            .mode-card { background: #37474F; border-color: #455A64; }
+            .mode-card.selected { background: #1565C0; border-color: #42A5F5; }
+            .mode-card p { color: #ECEFF1; }
+            .token-help { background: #3E2723; border-color: #FF8F00; color: #FFE0B2; }
+            .token-help code { background: #4E342E; color: #FFCC80; }
+            .info-text { background: #1B5E20; color: #C8E6C9; }
+            .input-field input, .input-field textarea { color: #ECEFF1; }
+            .input-field label { color: #90A4AE; }
+            [type="checkbox"] + span { color: #B0BEC5; }
+            table.table-values { background: #37474F; }
+            table.table-values thead { background: #455A64; }
+            table.table-values th, table.table-values td { color: #ECEFF1; }
+        }
+    </style>
 </head>
 <body>
 <div class="m adapter-container">
-<!-- Header Card -->
-<div class="card section-card">
-<div class="card-title-main">
-<i class="material-icons left" style="font-size:36px;">print</i>
-<span style="font-size:24px; vertical-align:middle;">Anycubic Kobra 3D Printer Adapter</span>
-</div>
-<div class="card-content">
-<p class="translate">Steuern und überwachen Sie Ihre Anycubic Kobra 3D-Drucker über ioBroker.</p>
-</div>
+    <!-- Header -->
+    <div class="adapter-header">
+        <i class="material-icons">print</i>
+        <h5>Anycubic Kobra 3D Printer</h5>
+    </div>
+
+    <!-- Connection Mode -->
+    <div class="card section-card">
+        <div class="section-header"><i class="material-icons">settings_ethernet</i>Verbindungsmodus</div>
+        <div class="card-content">
+            <div class="row">
+                <div class="col s6">
+                    <div class="card mode-card" id="mode-cloud" onclick="selectMode('cloud')">
+                        <div class="card-content center-align">
+                            <i class="material-icons large blue-text text-darken-2">cloud</i>
+                            <p>Anycubic Cloud</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col s6">
+                    <div class="card mode-card" id="mode-local" onclick="selectMode('local')">
+                        <div class="card-content center-align">
+                            <i class="material-icons large green-text text-darken-2">router</i>
+                            <p>Lokales Netzwerk</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" id="connectionMode" class="value" data-name="connectionMode" value="cloud">
+        </div>
+    </div>
+
+    <!-- Cloud Config -->
+    <div class="card section-card" id="cloud-config">
+        <div class="section-header"><i class="material-icons">vpn_key</i>Cloud-Konfiguration</div>
+        <div class="card-content">
+            <div class="token-help">
+                <b>Token finden:</b><br>
+                <code>%AppData%\AnycubicSlicerNext\AnycubicSlicerNext.conf</code><br>
+                Suchen Sie nach <code>"access_token"</code> und kopieren Sie den Wert.
+            </div>
+            <div class="row">
+                <div class="input-field col s12">
+                    <textarea id="cloudToken" class="materialize-textarea value" data-name="cloudToken" style="min-height:60px;"></textarea>
+                    <label for="cloudToken">Cloud Access Token (344 Zeichen)</label>
+                </div>
+            </div>
+            <div class="row" style="margin-bottom:0;">
+                <div class="col s12">
+                    <label>
+                        <input type="checkbox" id="mqttEnabled" class="filled-in" />
+                        <span>MQTT aktivieren (Echtzeit-Updates)</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Local Config -->
+    <div class="card section-card" id="local-config" style="display:none;">
+        <div class="section-header"><i class="material-icons">devices</i>Lokale Drucker</div>
+        <div class="card-content">
+            <div class="info-text">
+                <b>LAN-Modus aktivieren:</b> Drucker → Einstellungen → Netzwerk → LAN-Modus
+            </div>
+            <table class="table-values" id="printers" data-name="printers">
+                <thead>
+                    <tr>
+                        <th data-name="enabled" data-type="checkbox" data-default="true" style="width:60px;">Aktiv</th>
+                        <th data-name="name" data-type="text">Name</th>
+                        <th data-name="model" data-type="select" data-options="Kobra S1;Kobra 3;Kobra 3 Combo;Kobra 2;Kobra 2 Pro" data-default="Kobra S1">Modell</th>
+                        <th data-name="ip" data-type="text">IP-Adresse</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <div style="margin-top:12px;">
+                <a class="btn-floating blue table-button-add"><i class="material-icons">add</i></a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Polling -->
+    <div class="card section-card">
+        <div class="section-header"><i class="material-icons">timer</i>Abfrage-Einstellungen</div>
+        <div class="card-content">
+            <div class="row" style="margin-bottom:0;">
+                <div class="input-field col s12 m6">
+                    <input type="number" id="pollInterval" class="value" data-name="pollInterval" min="5" max="300" value="30">
+                    <label for="pollInterval" class="active">Abfrageintervall (Sekunden)</label>
+                    <span class="helper-text" style="color:#757575;">Empfohlen: 30 Sekunden</span>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- Connection Mode Selection -->
-<div class="card section-card">
-<div class="section-header">
-<i class="material-icons">settings_ethernet</i>
-<span class="translate">Verbindungsmodus</span>
-</div>
-<div class="card-content">
-<div class="row">
-<div class="col s12 m6">
-<div class="card connection-mode-card" id="mode-cloud" onclick="selectConnectionMode('cloud')">
-<div class="card-content center-align">
-<i class="material-icons large" style="color:#1565c0;">cloud</i>
-<h5 class="translate">Anycubic Cloud</h5>
-<p class="grey-text translate">Verbindung über Anycubic Cloud Server.</p>
-</div>
-</div>
-</div>
-<div class="col s12 m6">
-<div class="card connection-mode-card" id="mode-local" onclick="selectConnectionMode('local')">
-<div class="card-content center-align">
-<i class="material-icons large" style="color:#2e7d32;">router</i>
-<h5 class="translate">Lokales Netzwerk (LAN)</h5>
-<p class="grey-text translate">Direkte Verbindung im lokalen Netzwerk.</p>
-</div>
-</div>
-</div>
-</div>
-<input type="hidden" class="value" id="connectionMode" data-name="connectionMode">
-</div>
-</div>
-
-<!-- Cloud Configuration -->
-<div class="card section-card" id="cloud-config">
-<div class="section-header">
-<i class="material-icons">vpn_key</i>
-<span class="translate">Cloud-Konfiguration</span>
-</div>
-<div class="card-content">
-<div class="instructions-list">
-<strong><i class="material-icons tiny">info</i> So erhalten Sie den Cloud-Token:</strong>
-<ol>
-<li>Installieren Sie <strong>Anycubic Slicer Next</strong> (Windows)</li>
-<li>Melden Sie sich mit Ihrem Anycubic-Konto an</li>
-<li>Öffnen Sie: <code>%AppData%\AnycubicSlicerNext\AnycubicSlicerNext.conf</code></li>
-<li>Kopieren Sie den Wert von <code>"access_token"</code></li>
-</ol>
-</div>
-
-<div class="row">
-<div class="input-field col s12">
-<i class="material-icons prefix">lock</i>
-<textarea id="cloudToken" class="materialize-textarea value token-input" data-name="cloudToken" style="height:80px;"></textarea>
-<label for="cloudToken" class="translate">Cloud Access Token</label>
-</div>
-</div>
-
-<div class="row">
-<div class="col s12">
-<label>
-<input type="checkbox" class="value filled-in" id="mqttEnabled" data-name="mqttEnabled" checked="checked"/>
-<span class="translate">MQTT aktivieren (Echtzeit-Updates)</span>
-</label>
-</div>
-</div>
-</div>
-</div>
-
-<!-- Local Printer Configuration -->
-<div class="card section-card" id="local-config" style="display:none;">
-<div class="section-header">
-<i class="material-icons">devices</i>
-<span class="translate">Lokale Drucker</span>
-</div>
-<div class="card-content">
-<p class="grey-text">
-Aktivieren Sie den LAN-Modus auf Ihrem Drucker: Einstellungen &gt; Netzwerk &gt; LAN-Modus
-</p>
-
-<div id="printer-list"></div>
-
-<button class="btn waves-effect waves-light" onclick="addPrinter()">
-<i class="material-icons left">add</i>
-<span class="translate">Drucker hinzufügen</span>
-</button>
-</div>
-</div>
-
-<!-- Polling Configuration -->
-<div class="card section-card">
-<div class="section-header">
-<i class="material-icons">update</i>
-<span class="translate">Abfrage-Einstellungen</span>
-</div>
-<div class="card-content">
-<div class="row">
-<div class="input-field col s12 m6">
-<input type="number" id="pollInterval" class="value" data-name="pollInterval" min="5" max="300" value="30">
-<label for="pollInterval" class="active translate">Abfrageintervall (Sekunden)</label>
-</div>
-</div>
-</div>
-</div>
-</div>
-
-<!-- Printer Template -->
-<template id="printer-template">
-<div class="printer-item" data-index="">
-<div class="row" style="margin-bottom:0;">
-<div class="col s12 m1">
-<label>
-<input type="checkbox" class="printer-enabled filled-in" checked>
-<span></span>
-</label>
-</div>
-<div class="input-field col s12 m3">
-<input type="text" class="printer-name" placeholder="Mein Drucker">
-<label class="active">Name</label>
-</div>
-<div class="input-field col s12 m3">
-<select class="printer-model browser-default">
-<option value="Kobra S1">Kobra S1</option>
-<option value="Kobra 3">Kobra 3</option>
-<option value="Kobra 3 Combo">Kobra 3 Combo</option>
-<option value="Kobra 2">Kobra 2</option>
-</select>
-</div>
-<div class="input-field col s12 m3">
-<input type="text" class="printer-ip" placeholder="192.168.1.100">
-<label class="active">IP-Adresse</label>
-</div>
-<div class="col s12 m2" style="margin-top:20px;">
-<button class="btn-small waves-effect waves-light red" onclick="removePrinter(this)">
-<i class="material-icons">delete</i>
-</button>
-</div>
-</div>
-</div>
-</template>
-
-<script type="text/javascript">
-let printerIndex = 0;
-
-// Select connection mode
-function selectConnectionMode(mode) {
-document.getElementById('connectionMode').value = mode;
-document.querySelectorAll('.connection-mode-card').forEach(function(card) {
-card.classList.remove('selected');
-});
-document.getElementById('mode-' + mode).classList.add('selected');
-document.getElementById('cloud-config').style.display = mode === 'cloud' ? 'block' : 'none';
-document.getElementById('local-config').style.display = mode === 'local' ? 'block' : 'none';
+<script>
+function selectMode(mode) {
+    document.getElementById('connectionMode').value = mode;
+    document.querySelectorAll('.mode-card').forEach(function(c) { c.classList.remove('selected'); });
+    document.getElementById('mode-' + mode).classList.add('selected');
+    document.getElementById('cloud-config').style.display = (mode === 'cloud') ? 'block' : 'none';
+    document.getElementById('local-config').style.display = (mode === 'local') ? 'block' : 'none';
 }
 
-// Add a new printer entry
-function addPrinter() {
-var template = document.getElementById('printer-template');
-var clone = template.content.cloneNode(true);
-var item = clone.querySelector('.printer-item');
-item.dataset.index = printerIndex++;
-document.getElementById('printer-list').appendChild(clone);
-M.updateTextFields();
-}
-
-// Remove a printer entry
-function removePrinter(btn) {
-btn.closest('.printer-item').remove();
-}
-
-// Collect printer configuration
-function collectPrinters() {
-var printers = [];
-document.querySelectorAll('.printer-item').forEach(function(item) {
-printers.push({
-enabled: item.querySelector('.printer-enabled').checked,
-name: item.querySelector('.printer-name').value,
-model: item.querySelector('.printer-model').value,
-ip: item.querySelector('.printer-ip').value
-});
-});
-return printers;
-}
-
-// This will be called by the admin adapter when settings are loaded
 function load(settings, onChange) {
-if (!settings) return;
-
-// Load connection mode
-selectConnectionMode(settings.connectionMode || 'cloud');
-
-// Load values using jQuery (ioBroker standard)
-$('.value').each(function () {
-var $this = $(this);
-var id = $this.attr('id');
-if (id && settings[id] !== undefined) {
-if ($this.attr('type') === 'checkbox') {
-$this.prop('checked', settings[id]);
-} else {
-$this.val(settings[id]);
-}
-}
-});
-
-// Load printers
-if (settings.printers && settings.printers.length > 0) {
-settings.printers.forEach(function(printer) {
-addPrinter();
-var items = document.querySelectorAll('.printer-item');
-var lastItem = items[items.length - 1];
-lastItem.querySelector('.printer-enabled').checked = printer.enabled;
-lastItem.querySelector('.printer-name').value = printer.name || '';
-lastItem.querySelector('.printer-model').value = printer.model || 'Kobra S1';
-lastItem.querySelector('.printer-ip').value = printer.ip || '';
-});
+    if (!settings) return;
+    selectMode(settings.connectionMode || 'cloud');
+    document.getElementById('cloudToken').value = settings.cloudToken || '';
+    document.getElementById('mqttEnabled').checked = (settings.mqttEnabled !== false);
+    document.getElementById('pollInterval').value = settings.pollInterval || 30;
+    if (settings.printers && typeof values2table === 'function') {
+        values2table('printers', settings.printers, onChange);
+    }
+    M.updateTextFields();
+    onChange(false);
+    document.querySelectorAll('input, textarea, select').forEach(function(el) {
+        el.addEventListener('change', function() { onChange(true); });
+        el.addEventListener('input', function() { onChange(true); });
+    });
 }
 
-M.updateTextFields();
-onChange(false);
-
-// Track changes
-$('.value').on('change', function() {
-onChange(true);
-});
-}
-
-// This will be called by the admin adapter when settings should be saved
 function save(callback) {
-var obj = {};
-
-$('.value').each(function () {
-var $this = $(this);
-var id = $this.attr('id');
-if (id) {
-if ($this.attr('type') === 'checkbox') {
-obj[id] = $this.prop('checked');
-} else {
-obj[id] = $this.val();
-}
-}
-});
-
-// Add printers array
-obj.printers = collectPrinters();
-
-callback(obj);
+    callback({
+        connectionMode: document.getElementById('connectionMode').value || 'cloud',
+        cloudToken: document.getElementById('cloudToken').value || '',
+        mqttEnabled: document.getElementById('mqttEnabled').checked,
+        pollInterval: parseInt(document.getElementById('pollInterval').value, 10) || 30,
+        printers: (typeof table2values === 'function') ? table2values('printers') : []
+    });
 }
 </script>
 </body>
