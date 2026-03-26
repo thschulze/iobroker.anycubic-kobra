@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "ioBroker Adapter for Anycubic Kobra 3D Printers (Kobra S1, Kobra 3)",
   "author": {
-    "name": "MiniMax Agent",
+    "name": "thschulze",
     "email": "info@iobroker.net"
   },
-  "homepage": "https://github.com/iobroker-community-adapters/ioBroker.anycubic-kobra",
+  "homepage": "https://github.com/thschulze/IOBroker-Anycubic-Kobra",
   "license": "MIT",
   "keywords": [
     "ioBroker",
@@ -20,7 +20,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/iobroker-community-adapters/ioBroker.anycubic-kobra.git"
+    "url": "https://github.com/thschulze/IOBroker-Anycubic-Kobra.git"
   },
   "engines": {
     "node": ">=18"
@@ -43,7 +43,6 @@
   "files": [
     "admin/",
     "lib/",
-    "img/",
     "main.js",
     "io-package.json",
     "LICENSE"
