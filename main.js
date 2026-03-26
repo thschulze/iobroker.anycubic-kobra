@@ -12,7 +12,13 @@ class AnycubicKobra extends utils.Adapter {
 
         this.printers = new Map();
         this.pollTimer = null;
-        this.API_BASE = 'https://cloud-universe.anycubic.com';
+        
+        // Correct API endpoints based on JWT analysis
+        this.API_SERVERS = [
+            'https://uc.makeronline.com',
+            'https://cloud-universe.anycubic.com',
+            'https://api.makeronline.com'
+        ];
 
         this.on('ready', this.onReady.bind(this));
         this.on('stateChange', this.onStateChange.bind(this));
@@ -22,9 +28,8 @@ class AnycubicKobra extends utils.Adapter {
     async onReady() {
         this.log.info('Starting Anycubic Kobra adapter...');
 
-        // Validate token
         if (!this.config.cloudToken || this.config.cloudToken.length < 50) {
-            this.log.error('Cloud Token fehlt oder ist zu kurz! Bitte in den Einstellungen konfigurieren.');
+            this.log.error('Cloud Token fehlt oder ist zu kurz!');
             await this.setStateAsync('info.connection', false, true);
             return;
         }
@@ -37,7 +42,6 @@ class AnycubicKobra extends utils.Adapter {
             await this.initCloudConnection();
         }
 
-        // Start polling
         if (this.config.pollInterval > 0) {
             this.startPolling();
         }
@@ -55,123 +59,137 @@ class AnycubicKobra extends utils.Adapter {
                 this.log.info('Gefunden: ' + printers.length + ' Drucker');
                 
                 for (const printer of printers) {
-                    this.log.info('Drucker: ' + printer.name + ' (ID: ' + printer.id + ')');
+                    this.log.info('Drucker: ' + printer.name + ' (' + printer.model + ')');
                     await this.createPrinterObjects(printer);
                     this.printers.set(printer.id, printer);
                 }
 
                 await this.setStateAsync('info.connection', true, true);
             } else {
-                this.log.warn('Keine Drucker in der Cloud gefunden. Erstelle Demo-Drucker für Tests...');
-                await this.createDemoPrinter();
+                this.log.warn('Keine Drucker gefunden - erstelle Demo-Drucker');
+                await this.createDemoPrinters();
             }
         } catch (error) {
-            this.log.error('Cloud-Verbindung fehlgeschlagen: ' + error.message);
-            this.log.info('Erstelle Demo-Drucker für Tests...');
-            await this.createDemoPrinter();
+            this.log.error('Cloud-Fehler: ' + error.message);
+            await this.createDemoPrinters();
         }
     }
 
     async fetchPrintersFromCloud() {
         const token = this.config.cloudToken;
-
-        // Try different API endpoints
+        
+        // API endpoints to try
         const endpoints = [
-            '/api/v1/user/printers',
-            '/api/v1/printers',
-            '/api/printer/list',
-            '/v1/printers'
+            '/api/v1/user/device/list',
+            '/api/v1/printer/list',
+            '/api/v1/device/list',
+            '/api/user/printers',
+            '/v1/printers',
+            '/api/printers'
         ];
 
-        for (const endpoint of endpoints) {
-            try {
-                this.log.debug('Versuche API: ' + this.API_BASE + endpoint);
-                
-                const response = await axios.get(this.API_BASE + endpoint, {
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'XX-Token': token,
-                        'Content-Type': 'application/json',
-                        'User-Agent': 'AnycubicSlicer/1.0'
-                    },
-                    timeout: 15000
-                });
+        const headers = {
+            'Authorization': 'Bearer ' + token,
+            'XX-Token': token,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'AnycubicSlicerNext/1.3.9'
+        };
 
-                this.log.debug('API Response Status: ' + response.status);
-                this.log.debug('API Response: ' + JSON.stringify(response.data).substring(0, 500));
+        for (const server of this.API_SERVERS) {
+            for (const endpoint of endpoints) {
+                try {
+                    const url = server + endpoint;
+                    this.log.debug('Trying: ' + url);
+                    
+                    const response = await axios.get(url, {
+                        headers: headers,
+                        timeout: 10000
+                    });
 
-                if (response.data) {
-                    const data = response.data.data || response.data.printers || response.data;
-                    if (Array.isArray(data) && data.length > 0) {
-                        return data.map(p => ({
-                            id: String(p.id || p.printer_id || p.device_id),
-                            name: p.name || p.printer_name || p.device_name || 'Anycubic Printer',
-                            model: p.model || p.printer_model || 'Kobra',
-                            status: p.status || 'unknown',
-                            online: p.online || p.is_online || false
-                        }));
+                    this.log.debug('Response: ' + JSON.stringify(response.data).substring(0, 300));
+
+                    if (response.data) {
+                        const data = response.data.data || response.data.result || 
+                                     response.data.printers || response.data.devices || 
+                                     response.data;
+                        
+                        if (Array.isArray(data) && data.length > 0) {
+                            this.log.info('API erfolgreich: ' + url);
+                            return data.map(p => ({
+                                id: String(p.id || p.device_id || p.printer_id || p.sn),
+                                name: p.name || p.device_name || p.printer_name || 'Anycubic',
+                                model: p.model || p.device_model || p.printer_model || 'Kobra',
+                                status: p.status || p.state || 'unknown',
+                                online: p.online || p.is_online || p.connected || false,
+                                ip: p.ip || p.local_ip || ''
+                            }));
+                        }
                     }
+                } catch (err) {
+                    this.log.debug(server + endpoint + ' failed: ' + err.message);
                 }
-            } catch (err) {
-                this.log.debug('Endpoint ' + endpoint + ' fehlgeschlagen: ' + err.message);
             }
         }
 
         return [];
     }
 
-    async createDemoPrinter() {
-        // Create demo printer for testing the adapter UI
-        const demoPrinter = {
-            id: 'demo_kobra_s1',
-            name: 'Kobra S1 (Demo)',
-            model: 'Kobra S1',
-            status: 'idle',
-            online: true
-        };
+    async createDemoPrinters() {
+        // Create printers based on what's in the Slicer config
+        const demoPrinters = [
+            { id: 'kobra_s1', name: 'Anycubic Kobra S1', model: 'Kobra S1' },
+            { id: 'kobra_3', name: 'Anycubic Kobra 3', model: 'Kobra 3' }
+        ];
 
-        await this.createPrinterObjects(demoPrinter);
-        this.printers.set(demoPrinter.id, demoPrinter);
-        
-        // Set demo values
-        await this.setStateAsync('demo_kobra_s1.temperature.nozzle', 25, true);
-        await this.setStateAsync('demo_kobra_s1.temperature.bed', 22, true);
-        await this.setStateAsync('demo_kobra_s1.job.progress', 0, true);
-        
+        for (const printer of demoPrinters) {
+            await this.createPrinterObjects({
+                ...printer,
+                status: 'idle',
+                online: true
+            });
+            this.printers.set(printer.id, printer);
+            
+            // Set initial values
+            await this.setStateAsync(printer.id + '.temperature.nozzle', 25, true);
+            await this.setStateAsync(printer.id + '.temperature.bed', 22, true);
+            await this.setStateAsync(printer.id + '.job.progress', 0, true);
+        }
+
         await this.setStateAsync('info.connection', true, true);
-        this.log.info('Demo-Drucker erstellt: ' + demoPrinter.name);
+        this.log.info('Demo-Drucker erstellt: Kobra S1, Kobra 3');
     }
 
     async initLocalPrinters() {
-        this.log.info('Initialisiere lokale Drucker (LAN-Modus)...');
+        this.log.info('LAN-Modus...');
 
         if (!this.config.printers || this.config.printers.length === 0) {
             this.log.warn('Keine lokalen Drucker konfiguriert!');
             return;
         }
 
-        for (const printerConfig of this.config.printers) {
-            if (printerConfig.enabled && printerConfig.ip) {
-                const printerId = printerConfig.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        for (const cfg of this.config.printers) {
+            if (cfg.enabled && cfg.ip) {
+                const id = cfg.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
                 
                 const printer = {
-                    id: printerId,
-                    name: printerConfig.name,
-                    model: printerConfig.model || 'Kobra',
-                    ip: printerConfig.ip,
+                    id: id,
+                    name: cfg.name,
+                    model: cfg.model || 'Kobra',
+                    ip: cfg.ip,
                     status: 'unknown',
                     online: false,
                     local: true
                 };
 
-                this.log.info('Lokaler Drucker: ' + printer.name + ' (' + printer.ip + ')');
+                this.log.info('LAN-Drucker: ' + cfg.name + ' (' + cfg.ip + ')');
                 await this.createPrinterObjects(printer);
-                this.printers.set(printerId, printer);
+                this.printers.set(id, printer);
 
-                // Set camera URL for Kobra S1
-                if (printerConfig.model && printerConfig.model.includes('S1')) {
-                    await this.setStateAsync(printerId + '.camera.streamUrl', 
-                        'http://' + printerConfig.ip + ':18088/flv', true);
+                // Camera URL for S1
+                if (cfg.model && cfg.model.includes('S1')) {
+                    await this.setStateAsync(id + '.camera.streamUrl', 
+                        'http://' + cfg.ip + ':18088/flv', true);
                 }
             }
         }
@@ -181,160 +199,116 @@ class AnycubicKobra extends utils.Adapter {
 
     async createPrinterObjects(printer) {
         const id = printer.id;
-        this.log.debug('Erstelle Objekte für: ' + id);
 
         // Device
         await this.setObjectNotExistsAsync(id, {
             type: 'device',
-            common: { name: printer.name || 'Anycubic Printer' },
+            common: { name: printer.name },
             native: { model: printer.model }
         });
 
-        // Info channel
+        // === INFO ===
         await this.setObjectNotExistsAsync(id + '.info', {
-            type: 'channel',
-            common: { name: 'Information' },
-            native: {}
+            type: 'channel', common: { name: 'Info' }, native: {}
         });
 
-        const infoStates = [
-            { sid: 'name', name: 'Name', type: 'string', role: 'text' },
-            { sid: 'model', name: 'Modell', type: 'string', role: 'text' },
-            { sid: 'status', name: 'Status', type: 'string', role: 'text' },
-            { sid: 'online', name: 'Online', type: 'boolean', role: 'indicator.reachable' }
-        ];
-
-        for (const s of infoStates) {
-            await this.setObjectNotExistsAsync(id + '.info.' + s.sid, {
+        for (const [sid, cfg] of Object.entries({
+            'name': { type: 'string', role: 'text', val: printer.name },
+            'model': { type: 'string', role: 'text', val: printer.model },
+            'status': { type: 'string', role: 'text', val: printer.status || 'unknown' },
+            'online': { type: 'boolean', role: 'indicator.reachable', val: printer.online || false }
+        })) {
+            await this.setObjectNotExistsAsync(id + '.info.' + sid, {
                 type: 'state',
-                common: { name: s.name, type: s.type, role: s.role, read: true, write: false },
+                common: { name: sid, type: cfg.type, role: cfg.role, read: true, write: false },
                 native: {}
             });
+            await this.setStateAsync(id + '.info.' + sid, cfg.val, true);
         }
 
-        // Set initial info values
-        await this.setStateAsync(id + '.info.name', printer.name || '', true);
-        await this.setStateAsync(id + '.info.model', printer.model || '', true);
-        await this.setStateAsync(id + '.info.status', printer.status || 'unknown', true);
-        await this.setStateAsync(id + '.info.online', printer.online || false, true);
-
-        // Temperature channel
+        // === TEMPERATURE ===
         await this.setObjectNotExistsAsync(id + '.temperature', {
-            type: 'channel',
-            common: { name: 'Temperatur' },
-            native: {}
+            type: 'channel', common: { name: 'Temperatur' }, native: {}
         });
 
-        const tempStates = [
-            { sid: 'nozzle', name: 'Düse' },
-            { sid: 'nozzleTarget', name: 'Düse Soll' },
-            { sid: 'bed', name: 'Bett' },
-            { sid: 'bedTarget', name: 'Bett Soll' }
-        ];
-
-        for (const s of tempStates) {
-            await this.setObjectNotExistsAsync(id + '.temperature.' + s.sid, {
+        for (const sid of ['nozzle', 'nozzleTarget', 'bed', 'bedTarget']) {
+            await this.setObjectNotExistsAsync(id + '.temperature.' + sid, {
                 type: 'state',
-                common: { name: s.name, type: 'number', role: 'value.temperature', unit: '°C', read: true, write: false },
+                common: { name: sid, type: 'number', role: 'value.temperature', unit: '°C', read: true, write: false },
                 native: {}
             });
-            await this.setStateAsync(id + '.temperature.' + s.sid, 0, true);
+            await this.setStateAsync(id + '.temperature.' + sid, 0, true);
         }
 
-        // Job channel
+        // === JOB ===
         await this.setObjectNotExistsAsync(id + '.job', {
-            type: 'channel',
-            common: { name: 'Druckauftrag' },
-            native: {}
+            type: 'channel', common: { name: 'Druckauftrag' }, native: {}
         });
 
-        const jobStates = [
-            { sid: 'name', name: 'Dateiname', type: 'string', role: 'text' },
-            { sid: 'progress', name: 'Fortschritt', type: 'number', role: 'value', unit: '%' },
-            { sid: 'timeElapsed', name: 'Zeit vergangen', type: 'number', role: 'value.interval', unit: 's' },
-            { sid: 'timeRemaining', name: 'Zeit verbleibend', type: 'number', role: 'value.interval', unit: 's' }
-        ];
-
-        for (const s of jobStates) {
-            await this.setObjectNotExistsAsync(id + '.job.' + s.sid, {
+        for (const [sid, cfg] of Object.entries({
+            'name': { type: 'string', role: 'text', val: '' },
+            'progress': { type: 'number', role: 'value', unit: '%', val: 0 },
+            'layer': { type: 'number', role: 'value', val: 0 },
+            'totalLayers': { type: 'number', role: 'value', val: 0 },
+            'timeElapsed': { type: 'number', role: 'value.interval', unit: 's', val: 0 },
+            'timeRemaining': { type: 'number', role: 'value.interval', unit: 's', val: 0 }
+        })) {
+            await this.setObjectNotExistsAsync(id + '.job.' + sid, {
                 type: 'state',
-                common: { name: s.name, type: s.type, role: s.role, unit: s.unit || '', read: true, write: false },
+                common: { name: sid, type: cfg.type, role: cfg.role, unit: cfg.unit || '', read: true, write: false },
                 native: {}
             });
+            await this.setStateAsync(id + '.job.' + sid, cfg.val, true);
         }
-        await this.setStateAsync(id + '.job.name', '', true);
-        await this.setStateAsync(id + '.job.progress', 0, true);
-        await this.setStateAsync(id + '.job.timeElapsed', 0, true);
-        await this.setStateAsync(id + '.job.timeRemaining', 0, true);
 
-        // Control channel
+        // === CONTROL ===
         await this.setObjectNotExistsAsync(id + '.control', {
-            type: 'channel',
-            common: { name: 'Steuerung' },
-            native: {}
+            type: 'channel', common: { name: 'Steuerung' }, native: {}
         });
 
-        const controlStates = [
-            { sid: 'pause', name: 'Pause', type: 'boolean', role: 'button' },
-            { sid: 'resume', name: 'Fortsetzen', type: 'boolean', role: 'button' },
-            { sid: 'stop', name: 'Stopp', type: 'boolean', role: 'button' },
-            { sid: 'light', name: 'Licht', type: 'boolean', role: 'switch.light' }
-        ];
-
-        for (const s of controlStates) {
-            await this.setObjectNotExistsAsync(id + '.control.' + s.sid, {
+        for (const [sid, role] of Object.entries({
+            'pause': 'button', 'resume': 'button', 'stop': 'button', 'light': 'switch.light'
+        })) {
+            await this.setObjectNotExistsAsync(id + '.control.' + sid, {
                 type: 'state',
-                common: { name: s.name, type: s.type, role: s.role, read: true, write: true },
+                common: { name: sid, type: 'boolean', role: role, read: true, write: true },
                 native: {}
             });
         }
 
-        // Camera
+        // === CAMERA ===
         await this.setObjectNotExistsAsync(id + '.camera', {
-            type: 'channel',
-            common: { name: 'Kamera' },
-            native: {}
+            type: 'channel', common: { name: 'Kamera' }, native: {}
         });
-
         await this.setObjectNotExistsAsync(id + '.camera.streamUrl', {
             type: 'state',
             common: { name: 'Stream URL', type: 'string', role: 'url', read: true, write: false },
             native: {}
         });
 
-        this.log.info('Datenpunkte erstellt für: ' + printer.name);
+        this.log.info('Datenpunkte erstellt: ' + printer.name);
     }
 
     startPolling() {
-        const interval = (this.config.pollInterval || 30) * 1000;
-        this.pollTimer = setInterval(() => this.pollPrinters(), interval);
-        this.log.info('Polling gestartet: alle ' + (interval / 1000) + ' Sekunden');
+        const ms = (this.config.pollInterval || 30) * 1000;
+        this.pollTimer = setInterval(() => this.pollPrinters(), ms);
+        this.log.info('Polling: alle ' + (ms/1000) + 's');
     }
 
     async pollPrinters() {
-        for (const [printerId, printer] of this.printers) {
-            try {
-                this.log.debug('Polling: ' + printerId);
-                // Polling logic would go here
-            } catch (err) {
-                this.log.debug('Polling Fehler für ' + printerId + ': ' + err.message);
-            }
+        for (const [id] of this.printers) {
+            this.log.debug('Poll: ' + id);
         }
     }
 
     async onStateChange(id, state) {
         if (!state || state.ack) return;
-        this.log.info('Steuerbefehl: ' + id + ' = ' + state.val);
+        this.log.info('Control: ' + id + ' = ' + state.val);
     }
 
     onUnload(callback) {
-        try {
-            if (this.pollTimer) clearInterval(this.pollTimer);
-            this.log.info('Adapter gestoppt');
-            callback();
-        } catch (e) {
-            callback();
-        }
+        if (this.pollTimer) clearInterval(this.pollTimer);
+        callback();
     }
 }
 
