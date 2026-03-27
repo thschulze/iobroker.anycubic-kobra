@@ -12,11 +12,12 @@ class AnycubicKobra extends utils.Adapter {
 
         this.printers = new Map();
         this.pollTimer = null;
+        this.activeServer = null;
         
-        // Die bekannten Anycubic Cloud Base-URLs
+        // Aktualisierte Liste der bekannten Anycubic / Makeronline Cloud Base-URLs
         this.API_SERVERS = [
-            'https://cloud-universe.anycubic.com',
-            'https://api.makeronline.com',
+            'https://api.makeronline.com',       // Aktuelle Kobra 3 / Makeronline API
+            'https://cloud-universe.anycubic.com', // Ältere Kobra 2 API
             'https://uc.makeronline.com'
         ];
 
@@ -28,14 +29,14 @@ class AnycubicKobra extends utils.Adapter {
     async onReady() {
         this.log.info('Starte Anycubic Kobra Adapter...');
 
-        if (!this.config.cloudToken || this.config.cloudToken.length < 50) {
-            this.log.error('Cloud Token fehlt! Bitte Token aus der AnycubicSlicerNext.conf eintragen.');
+        if (!this.config.cloudToken || this.config.cloudToken.length < 20) {
+            this.log.error('Cloud Token fehlt oder ist ungültig! Bitte eintragen.');
             await this.setStateAsync('info.connection', false, true);
             return;
         }
 
-        // Token säubern (falls der User versehentlich Anführungszeichen mitkopiert hat)
-        this.config.cloudToken = this.config.cloudToken.replace(/['"]+/g, '');
+        // Token säubern
+        this.config.cloudToken = this.config.cloudToken.replace(/['"]+/g, '').trim();
         this.log.info(`Token geladen (${this.config.cloudToken.length} Zeichen).`);
 
         if (this.config.connectionMode === 'local') {
@@ -51,15 +52,18 @@ class AnycubicKobra extends utils.Adapter {
         this.subscribeStates('*.control.*');
     }
 
-    // --- ZENTRALE HEADER-FUNKTION (Basierend auf WaresWichall & balassy) ---
+    // --- ZENTRALE HEADER-FUNKTION ---
+    // Die Community hat herausgefunden, dass Makeronline oft zusätzliche Header verlangt.
     getApiHeaders() {
         return {
-            'XX-Token': this.config.cloudToken,
+            'token': this.config.cloudToken, // Makeronline nutzt oft 'token' statt 'XX-Token'
+            'XX-Token': this.config.cloudToken, // Fallback für ältere APIs
             'Authorization': `Bearer ${this.config.cloudToken}`,
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            // Wichtig: App faken, damit Anycubic die Requests akzeptiert
-            'User-Agent': 'AnycubicSlicerNext/1.3.9' 
+            'User-Agent': 'AnycubicSlicerNext/1.3.9',
+            'app-id': 'anycubic_slicer', // Wichtig für Makeronline
+            'app-version': '1.3.9'
         };
     }
 
@@ -80,7 +84,7 @@ class AnycubicKobra extends utils.Adapter {
 
                 await this.setStateAsync('info.connection', true, true);
             } else {
-                this.log.warn('Keine Drucker in der Cloud gefunden.');
+                this.log.warn('Keine Drucker in der Cloud gefunden. Bitte Token und API-Status prüfen.');
             }
         } catch (error) {
             this.log.error('Cloud-Initialisierungs-Fehler: ' + error.message);
@@ -88,7 +92,12 @@ class AnycubicKobra extends utils.Adapter {
     }
 
     async fetchPrintersFromCloud() {
-        const endpoints = ['/api/v1/device/list', '/api/v1/user/device/list'];
+        // Verschiedene Endpunkte, die Anycubic über die Zeit genutzt hat
+        const endpoints = [
+            '/v1/user/devices',         // Neue Makeronline API
+            '/api/v1/device/list',      // Alte Cloud
+            '/api/v1/user/device/list'
+        ];
 
         for (const server of this.API_SERVERS) {
             for (const endpoint of endpoints) {
@@ -101,15 +110,15 @@ class AnycubicKobra extends utils.Adapter {
                         timeout: 10000 
                     });
 
-                    // Anycubic versteckt die Daten oft in data.data oder data.result
-                    const data = response.data.data || response.data.result || response.data;
+                    // Datenstruktur extrahieren (Anycubic verschachtelt diese oft tief)
+                    const data = response.data?.data?.list || response.data?.data || response.data?.result || response.data;
                     
                     if (Array.isArray(data) && data.length > 0) {
                         this.log.info(`API Endpunkt erfolgreich: ${url}`);
-                        this.activeServer = server; // Treffer speichern für Polling!
+                        this.activeServer = server; // Treffer speichern für Polling & Commands
                         
                         return data.map(p => ({
-                            id: String(p.device_id || p.sn || p.id),
+                            id: String(p.device_id || p.iot_id || p.sn || p.id),
                             name: p.device_name || p.name || 'Anycubic Drucker',
                             model: p.device_model || p.model || 'Kobra Serie',
                             status: p.status || p.state || 'unknown',
@@ -126,7 +135,8 @@ class AnycubicKobra extends utils.Adapter {
     }
 
     startPolling() {
-        const ms = (this.config.pollInterval || 15) * 1000; // 15 Sek ist ein guter Standard für 3D-Drucker
+        // Empfehlung: Polling-Intervall nicht unter 15 Sekunden, um Bans zu vermeiden.
+        const ms = (this.config.pollInterval || 15) * 1000;
         this.pollPrinters();
         this.pollTimer = setInterval(() => this.pollPrinters(), ms);
         this.log.info(`Cloud-Polling gestartet (Intervall: ${ms/1000}s)`);
@@ -139,27 +149,37 @@ class AnycubicKobra extends utils.Adapter {
             if (printer.local) continue;
 
             try {
-                const url = `${this.activeServer}/api/v1/device/status?device_id=${printer.id}`;
-                
-                const response = await axios.get(url, {
-                    headers: this.getApiHeaders(),
-                    timeout: 5000
-                });
+                // Versuche den Makeronline Endpunkt, ansonsten Fallback
+                const endpoints = [
+                    `/v1/device/status?device_id=${id}`,
+                    `/api/v1/device/status?device_id=${id}`
+                ];
 
-                const data = response.data.data || response.data.result || response.data;
+                let data = null;
+                for (const endpoint of endpoints) {
+                    try {
+                        const response = await axios.get(`${this.activeServer}${endpoint}`, {
+                            headers: this.getApiHeaders(),
+                            timeout: 5000
+                        });
+                        data = response.data?.data || response.data?.result;
+                        if (data) break; // Erfolgreich abgerufen
+                    } catch (e) {
+                        // Ignorieren und nächsten Endpunkt versuchen
+                    }
+                }
                 
                 if (data) {
-                    // Logging der Raw-Daten auf Debug-Level, damit du später exakt siehst, was Anycubic liefert
                     this.log.debug(`Status Payload für ${id}: ${JSON.stringify(data)}`);
                     
-                    // --- Mapping der Variablen (Mit Fallbacks für Kobra 2 vs. Kobra 3) ---
+                    // --- Mapping der Variablen ---
                     const nozzle = data.print_temp || data.temp_nozzle || data.nozzle_temp;
                     const bed = data.bed_temp || data.temp_bed;
                     const progress = data.print_progress || data.progress;
                     const status = data.print_status || data.status || data.state;
                     const timeRemain = data.remain_time || data.time_remain || data.left_time;
 
-                    // Werte in ioBroker updaten (nur wenn sie in der API existieren)
+                    // Werte in ioBroker updaten
                     if (nozzle !== undefined) await this.setStateAsync(`${id}.temperature.nozzle`, Number(nozzle), true);
                     if (bed !== undefined) await this.setStateAsync(`${id}.temperature.bed`, Number(bed), true);
                     if (progress !== undefined) await this.setStateAsync(`${id}.job.progress`, Number(progress), true);
@@ -184,20 +204,21 @@ class AnycubicKobra extends utils.Adapter {
         this.log.info(`Sende '${command}' an Drucker ${printerId}...`);
 
         try {
-            // Anycubic nutzt oft POST-Requests für Commands. 
-            // ACHTUNG: Die Integer-Werte (1, 2, 3) für Commands variieren in der API. 
-            // Hier ein übliches Pattern (Pause = 1, Resume = 2, Stop = 3).
+            // Anycubic Commands variieren extrem. Oft wird ein verschachteltes JSON erwartet.
+            // Dies ist die Struktur, die von neueren APIs oft verlangt wird.
             let cmdInt = 0;
             if (command === 'pause') cmdInt = 1;
             if (command === 'resume') cmdInt = 2;
             if (command === 'stop') cmdInt = 3;
 
-            const url = `${this.activeServer}/api/v1/device/command`;
+            const url = `${this.activeServer}/v1/device/command`; // oder /api/v1/device/command
+            
+            // Makeronline erwartet oft ein Payload-Objekt im Body
             const payload = {
                 device_id: printerId,
                 cmd: cmdInt,
-                // Wenn es ein Switch ist (z.B. Licht), sende 1 für True, 0 für False
-                val: typeof state.val === 'boolean' ? (state.val ? 1 : 0) : state.val 
+                // Manche APIs erwarten 'data', andere direkt 'val'
+                data: typeof state.val === 'boolean' ? (state.val ? 1 : 0) : state.val 
             };
 
             await axios.post(url, payload, {
@@ -210,10 +231,13 @@ class AnycubicKobra extends utils.Adapter {
 
         } catch (error) {
             this.log.error(`Konnte '${command}' nicht senden: ${error.message}`);
+            // Nützlich für Debugging, falls Anycubic den Request ablehnt (z.B. 400 Bad Request)
+            if (error.response) {
+                this.log.error(`API Response: ${JSON.stringify(error.response.data)}`);
+            }
         }
     }
 
-    // Platzhalter für deine bestehenden Funktionen (der Übersichtlichkeit halber weggelassen)
     async initLocalPrinters() { /* Dein bestehender lokaler Code */ }
     async createPrinterObjects(printer) { /* Dein bestehender Setup-Code */ }
 
